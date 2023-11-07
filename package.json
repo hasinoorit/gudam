@@ -1,0 +1,54 @@
+{
+  "name": "gudam",
+  "version": "0.0.1-beta.1",
+  "description": "Gudam is a tiny store management library for react.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hasinoorit/gudam.git"
+  },
+  "keywords": [
+    "react",
+    "pinia",
+    "store",
+    "redux",
+    "state"
+  ],
+  "scripts": {
+    "build": "npx unbuild"
+  },
+  "author": "Md. Hashinur Rahman",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/hasinoorit/gudam/issues"
+  },
+  "homepage": "https://github.com/hasinoorit/gudam#readme",
+  "unbuild": {
+    "declaration": true,
+    "rollup": {
+      "emitCJS": true,
+      "esbuild": {
+        "minify": true
+      }
+    }
+  },
+  "peerDependencies": {
+    "react": "^18.2.0"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "devDependencies": {
+    "@types/react": "^18.2.36",
+    "typescript": "^5.2.2"
+  }
+}
