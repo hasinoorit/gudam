@@ -3,3 +3,4 @@ src
 .vscode
 tsconfig.json
 tsconfig.node.json
+assets
