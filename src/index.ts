@@ -10,7 +10,7 @@ type MethodTypes<T> = {
 type Getters = Record<string, () => unknown>
 type ResetInjector = {
   $reset: () => void
-  $silentlyOnce: (cb: () => void) => void
+  $preload: (cb: () => void) => void
 }
 type TriggerInjector = { $trigger: () => void }
 export type GudamPlugin<S extends object = {}> = {
@@ -86,7 +86,7 @@ const createGudam = () => {
             $trigger()
           },
           $trigger: $trigger,
-          $silentlyOnce: (cb: () => void) => {
+          $preload: (cb: () => void) => {
             if (!hasChanged) {
               isSilent = true
               cb()

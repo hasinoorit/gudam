@@ -214,7 +214,7 @@ export default Greeting
 
 ## Preloading Data
 
-You can use the `$silentlyOnce` built-in function to preload data into your store. It can commit changes without triggering effects and runs only once:
+You can use the `$preload` built-in function to preload data into your store. It can commit changes without triggering effects and runs only once:
 
 ```javascript
 import { GudamContext, useGudam } from 'gudam'
@@ -223,7 +223,7 @@ import { gudamAuth } from '../store/authStore'
 function App() {
   const gudam = useGudam()
   const auth = gudamAuth(gudam) // providing the gudam instance because the context is not provided yet
-  auth.$silentlyOnce(() => {
+  auth.$preload(() => {
     // Callback where we can silently update the store once.
     auth.setFirstName('Hasinoor')
     // perform some more synchronous operations
@@ -239,7 +239,7 @@ function App() {
 export default App
 ```
 
-Please note that once the store is changed, `$silentlyOnce` does not execute its callback, and it does not support asynchronous operations.
+Please note that once the store is changed, `$preload` does not execute its callback, and it does not support asynchronous operations.
 
 ## Store Inside Store
 
