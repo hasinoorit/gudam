@@ -1,6 +1,10 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useState } from 'react'
 
-export const GudamContext = createContext<any[]>([])
+type EmptyStore = {
+  $reset: () => void
+  $trigger: () => void
+  $preload: (cb: () => void) => void
+}
 
 type MethodTypes<T> = {
   readonly [K in keyof T]: T[K] extends (...args: any[]) => any
@@ -14,16 +18,17 @@ type ResetInjector = {
 }
 type TriggerInjector = { $trigger: () => void }
 export type GudamPlugin<S extends object = {}> = {
-  initState?: (initialState: S) => unknown
-  onChange?: (newState: S) => void
+  initState?: (storeKey: string, initialState: S) => unknown
+  onChange?: (storeKey: string, newState: S) => void
 }
 type StoreState<
   S extends object,
   G extends Getters = {},
   A extends Record<string, Function> = {}
 > = {
+  key: string
   state: () => S
-  getters?: G & ThisType<S>
+  getters?: G & ThisType<S & G>
   actions?: A &
     ThisType<S & MethodTypes<G> & ResetInjector & TriggerInjector & A>
   plugins?: GudamPlugin<S>[]
@@ -35,7 +40,10 @@ type UnknownStore = StoreState<
   { [key: string]: Function }
 >
 
+type EmptyStoreS = Record<string, EmptyStore>
+
 // eslint-disable-next-line react-refresh/only-export-components
+export const GudamContext = createContext<EmptyStoreS>({})
 
 const proxyfy = <T extends object>(data: T) =>
   new Proxy(data, {
@@ -45,89 +53,90 @@ const proxyfy = <T extends object>(data: T) =>
   })
 
 const createGudam = () => {
-  const stores: UnknownStore[] = []
+  const stores: Record<string, UnknownStore> = {}
   const useGudam = () => {
     const [state, setState] = useState(() => {
-      return stores.map((option, storeId) => {
-        let isSilent = false
-        let hasChanged = false
-        const { plugins = [] } = option
-        const changeListener = plugins.filter((hooks) => hooks.onChange)
-        let currentState = option.state()
-        plugins.forEach((hooks) => {
-          if (hooks.initState) {
-            currentState = hooks.initState(currentState) as any
-          }
-        })
-        const onChange =
-          changeListener.length > 0
-            ? () => {
-                changeListener.forEach((hooks) => {
-                  hooks.onChange!(currentState)
-                })
+      const storeStates: EmptyStoreS = {}
+      for (const key in stores) {
+        if (Object.prototype.hasOwnProperty.call(stores, key)) {
+          const option = stores[key]
+          let isSilent = false
+          let hasChanged = false
+          const { plugins = [] } = option
+          const changeListener = plugins.filter((hooks) => hooks.onChange)
+          let currentState = option.state()
+          plugins.forEach((hooks) => {
+            if (hooks.initState) {
+              currentState = hooks.initState(key, currentState) as any
+            }
+          })
+          const onChange =
+            changeListener.length > 0
+              ? () => {
+                  changeListener.forEach((hooks) => {
+                    hooks.onChange!(key, currentState)
+                  })
+                }
+              : null
+          const $trigger = () => {
+            if (!isSilent) {
+              setState((oldState) => ({ ...oldState, key: proxyfy($this) }))
+              if (onChange) {
+                onChange()
               }
-            : null
-        const $trigger = () => {
-          if (!isSilent) {
-            setState((oldState) =>
-              oldState.map((store, index) =>
-                index === storeId ? proxyfy($this) : store
-              )
-            )
-            if (onChange) {
-              onChange()
+              hasChanged = true
             }
-            hasChanged = true
           }
-        }
-        const $this = {
-          $reset: () => {
-            currentState = option.state()
-            $trigger()
-          },
-          $trigger: $trigger,
-          $preload: (cb: () => void) => {
-            if (!hasChanged) {
-              isSilent = true
-              cb()
-              isSilent = false
-            }
-            hasChanged = true
-          },
-        }
-        for (const key in currentState) {
-          if (Object.prototype.hasOwnProperty.call(currentState, key)) {
-            Reflect.defineProperty($this, key, {
-              get() {
-                return currentState[key]
-              },
-              set(v) {
-                currentState[key] = v
-                $trigger()
-              },
-            })
+          const $this = {
+            $reset: () => {
+              currentState = option.state()
+              $trigger()
+            },
+            $trigger: $trigger,
+            $preload: (cb: () => void) => {
+              if (!hasChanged) {
+                isSilent = true
+                cb()
+                isSilent = false
+              }
+              hasChanged = true
+            },
           }
-        }
-        if (option.getters) {
-          for (const key in option.getters) {
-            if (Object.prototype.hasOwnProperty.call(option.getters, key)) {
-              const getter = option.getters[key]
+          for (const key in currentState) {
+            if (Object.prototype.hasOwnProperty.call(currentState, key)) {
               Reflect.defineProperty($this, key, {
-                get: getter.bind($this),
+                get() {
+                  return currentState[key]
+                },
+                set(v) {
+                  currentState[key] = v
+                  $trigger()
+                },
               })
             }
           }
-        }
-        if (option.actions) {
-          for (const key in option.actions) {
-            if (Object.prototype.hasOwnProperty.call(option.actions, key)) {
-              const action = option.actions[key]
-              Reflect.set($this, key, action.bind($this))
+          if (option.getters) {
+            for (const key in option.getters) {
+              if (Object.prototype.hasOwnProperty.call(option.getters, key)) {
+                const getter = option.getters[key]
+                Reflect.defineProperty($this, key, {
+                  get: getter.bind($this),
+                })
+              }
             }
           }
+          if (option.actions) {
+            for (const key in option.actions) {
+              if (Object.prototype.hasOwnProperty.call(option.actions, key)) {
+                const action = option.actions[key]
+                Reflect.set($this, key, action.bind($this))
+              }
+            }
+          }
+          storeStates[key] = $this
         }
-        return $this
-      })
+      }
+      return storeStates
     })
     return state
   }
@@ -138,10 +147,12 @@ const createGudam = () => {
   >(
     options: StoreState<S, G, A>
   ) => {
-    const storeId = stores.length
-    stores.push(options as UnknownStore)
-    const useStore = (ctx = useContext(GudamContext)) => {
-      return ctx[storeId] as S & MethodTypes<G> & ResetInjector & A
+    const { key } = options
+    stores[key] = options as UnknownStore
+    const useStore = (
+      ctx = useContext(GudamContext)
+    ): S & MethodTypes<G> & ResetInjector & A => {
+      return (ctx[key] as any) || ({} as any)
     }
     return useStore
   }
@@ -152,36 +163,43 @@ export const { useGudam, defineStore } = createGudam()
 
 const wait0 = () => new Promise<boolean>((resolve) => resolve(true))
 
-export const gudamPersistPlugin = (config: {
-  key: string
-  version?: string
-  session?: boolean
-  parser?: (str: string) => object
-}): GudamPlugin => {
+export const gudamPersistPlugin = (
+  config: {
+    version?: string
+    session?: boolean
+    parse?: (str: string) => object
+    stringify?: () => string
+  } = {}
+): GudamPlugin => {
   const storage =
     typeof sessionStorage !== 'undefined'
       ? config.session
         ? sessionStorage
         : localStorage
       : undefined
-  const dataKey = 'gudam_data__' + config.key
-  const dataVersion = 'gudam_version__' + config.key
-  const { parser = JSON.parse, version = '0.0.1' } = config
+  const dataVersion = 'gudam_version__' + config.version
+  const {
+    parse = JSON.parse,
+    version = '0.0.1',
+    stringify = JSON.stringify,
+  } = config
   let hasPending = false
   return {
-    initState(initialState) {
+    initState(key, initialState) {
+      const dataKey = 'gudam_data__' + key
       if (!storage) {
         return initialState
       }
       const savedData = storage.getItem(dataKey)
       if (storage.getItem(dataVersion) != version || !savedData) {
         storage.setItem(dataVersion, version)
-        storage.setItem(dataKey, JSON.stringify(initialState))
+        storage.setItem(dataKey, stringify(initialState))
         return initialState
       }
-      return parser(savedData)
+      return parse(savedData)
     },
-    onChange(newState) {
+    onChange(key, newState) {
+      const dataKey = 'gudam_data__' + key
       if (!storage) {
         return
       }
@@ -189,16 +207,9 @@ export const gudamPersistPlugin = (config: {
         hasPending = true
         wait0().then(() => {
           hasPending = false
-          storage.setItem(dataKey, JSON.stringify(newState))
+          storage.setItem(dataKey, stringify(newState))
         })
       }
     },
   }
-}
-
-export const useGinit = (cb: () => void) => {
-  if (typeof window === 'undefined') {
-    cb()
-  }
-  useEffect(cb, [])
 }

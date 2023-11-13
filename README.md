@@ -42,6 +42,7 @@ Define a store in Gudam using the `defineStore` function. Here's an example of h
 import { defineStore, gudamPersistPlugin } from 'gudam'
 
 export const gudamAuth = defineStore({
+  key: 'auth',
   state() {
     return {
       token: '',
@@ -79,6 +80,17 @@ export const gudamAuth = defineStore({
       parser: JSON.parse,
     }),
   ],
+})
+```
+
+### key (Required)
+
+The `key` property takes a `string` as unique identifier of your store.
+
+```javascript
+export const authGudam = defineStore({
+  key: 'auth',
+  // ...
 })
 ```
 
@@ -163,8 +175,10 @@ export const authGudam = defineStore({
   // ...
   actions: {
     setFirstName(name: string) {
-      this.profile = { ...this.profile, firstName: name }
-      this.$trigger()
+      this.profile.firstName = name // do not trigger effect
+      this.$trigger() // manually triggering effect
+      // or
+      this.profile = { ...this.profile, firstName: name } // automatically triggers effect
     },
   },
 })
@@ -275,11 +289,7 @@ import { gudamPersistPlugin } from 'gudam'
 
 export const gudamAuth = defineStore({
   // ...
-  plugins: [
-    gudamPersistPlugin({
-      key: 'auth',
-    }),
-  ],
+  plugins: [gudamPersistPlugin()],
 })
 ```
 
@@ -289,9 +299,8 @@ The persist plugin accepts an object as a parameter with properties such as `key
 
 | Property | Description                                             | Type                    | Required | Default Value |
 | -------- | ------------------------------------------------------- | ----------------------- | -------- | ------------- |
-| key      | A unique identifier for your store                      | String                  | Yes      | N/A           |
 | version  | The version number of your current store                | String                  | No       | 0.0.1         |
-| session  | Set the storage from `localStorage` to `sessionStorage` | Boolean                 | No       | False         |
+| session  | Set the storage from `localStorage` to `sessionStorage` | Boolean                 | No       | false         |
 | parser   | Parse the saved string of your state to an object       | (str: String) => Object | No       | JSON.parse    |
 
 Please note that the persist plugin is not recommended for use with server-side rendering (SSR), as it can lead to hydration issues.
@@ -302,14 +311,14 @@ A Gudam plugin should be an object with the following properties:
 
 ```typescript
 type GudamPlugin<S extends object = {}> = {
-  initState?: (initialState: S) => unknown
-  onChange?: (newState: S) => void
+  initState?: (storeKey: string, initialState: S) => unknown
+  onChange?: (storeKey: string, newState: S) => void
 }
 ```
 
-- **initState:** This function is called with the current initial state value during the initiation of your store. It should return a state object, which will be used as the initial state.
+- **initState:** This function is called with store key and the current initial state value during the initiation of your store. It should return a state object, which will be used as the initial state.
 
-- **onChange:** This function is called with the `newState` parameter whenever there is a change in your store.
+- **onChange:** This function is called with store key and the `newState` parameter whenever there is a change in your store.
 
 Please note that plugins execute in the order in which they are placed.
 
