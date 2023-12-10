@@ -1,6 +1,8 @@
 !dist/
 src
 .vscode
+.prettierrc
+.eslintrc.json
 tsconfig.json
 tsconfig.node.json
 assets
