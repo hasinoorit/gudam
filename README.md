@@ -1,22 +1,22 @@
-# Gudam (গুদাম): Streamlining React State Management
+# Gudam (গুদাম): Simplifying React State Management
 
 ![Gudam Banner](/assets/gudam.jpg)
 
 ## Introduction
 
-**Gudam** is a powerful yet lightweight React state management library that significantly enhances your application's performance. With a remarkably small footprint of just 1kb, it offers quick execution, straightforward implementation, scalability, and robust support for plugins. This TypeScript-based library ensures reliable and statically-typed state management for your React applications.
+**Gudam** stands as a robust yet lightweight React state management library, designed to elevate your application's performance. With an impressively small footprint of just 1kb, it boasts quick execution, straightforward implementation, and scalability. This TypeScript-based library ensures reliable and statically-typed state management for your React applications.
 
 ## Installation
 
-Getting started with Gudam is a breeze. You can install it using npm with the following command:
+Getting started with Gudam is a breeze. Simply install it using npm with the following command:
 
 ```bash
 npm install gudam
 ```
 
-## Setting Up the Store
+## Setting Up Gudam
 
-Integrating Gudam into your root component is a simple process. Follow these steps:
+Integrating Gudam into your root component is a straightforward process. Follow these steps:
 
 ```javascript
 import { GudamContext, useGudam } from 'gudam'
@@ -36,172 +36,71 @@ export default App
 
 ## Creating a Store
 
-Define a store in Gudam using the `defineStore` function. Here's an example of how to define a store for authentication:
+Define a store in Gudam using the `defineStore` function. The following example illustrates how to define a store for authentication, including additional details:
 
 ```javascript
-import { defineStore, gudamPersistPlugin } from 'gudam'
+import { defineStore } from 'gudam'
 
-export const gudamAuth = defineStore({
-  key: 'auth',
-  state() {
-    return {
-      token: '',
-      role: '',
-      profile: {
-        firstName: '',
-        lastName: '',
-      },
-    }
-  },
-  getters: {
-    isLoggedIn() {
-      return !!this.token && !!this.role
+export const authGudam = defineStore(
+  'auth', // Unique key
+  {
+    // states
+    token: '', // Authentication token
+    role: '', // User role
+    profile: {
+      firstName: '', // User's first name
+      lastName: '', // User's last name
     },
-    greetings() {
+    // accessors
+    get isLoggedIn() {
+      return !!this.token && !!this.role; // Check if the user is logged in
+    },
+    get greetingMessage() {
       return this.profile.firstName
         ? `Welcome back ${this.profile.firstName}`
-        : 'Welcome Guest'
+        : 'Welcome Guest';
     },
-  },
-  actions: {
+    // methods
     setAuth(token, role) {
-      this.token = token
-      this.role = role
+      this.token = token;
+      this.role = role;
     },
     setFirstName(name: string) {
-      this.profile = { ...this.profile, firstName: name }
+      this.profile = { ...this.profile, firstName: name };
     },
   },
-  plugins: [
-    gudamPersistPlugin({
-      key: 'auth',
-      version: '0.0.1',
-      session: false,
-      parser: JSON.parse,
-    }),
-  ],
-})
+  {
+    version: '0.0.1', // Version of the store
+    storage: localStorage, // Storage engine (localStorage or sessionStorage)
+    parse: JSON.parse, // Parser function to parse from string to store state
+    stringify: JSON.stringify, // Converts stateful properties of your store to JSON string
+  }
+);
 ```
 
-### key (Required)
+`defineStore` accepts three parameters:
 
-The `key` property takes a `string` as unique identifier of your store.
+1. **`key`**: A unique identifier for your store.
+2. **`store`**: Your store object with states, accessors, and methods.
 
-```javascript
-export const authGudam = defineStore({
-  key: 'auth',
-  // ...
-})
-```
+   - `states`: Non-function-type writable properties are states. In our `authGudam` store, we have `token`, `role`, and `profile` states.
+   - `accessors`: Accessors are functions with the `get` identifier, providing a way to access computed or derived properties from the state.
+   - `methods`: Methods are pure JavaScript functions. You can use these functions to make changes to your store states.
 
-### State (Required)
+   > The store object is a regular JavaScript object, except that it triggers effects if changes are made to any state property.
 
-The `state` property takes a function as a parameter and expects an object as the return value. This returned object becomes the source of truth for your store:
+3. **`persistOptions`** (optional): An object with persist options.
 
-```javascript
-export const authGudam = defineStore({
-  state: () => {
-    return {
-      token: '',
-      role: '',
-      profile: {
-        firstName: '',
-        lastName: '',
-      },
-    }
-  },
-})
-```
-
-### Getters (Optional)
-
-Getters allow you to define computed properties. Getter methods do not accept parameters, and you can access the state's properties using the `this` keyword inside getter methods. Each getter method should return a value:
-
-```javascript
-export const authGudam = defineStore({
-  ...
-  getters: {
-    isLoggedIn() {
-      return !!this.token && !!this.role
-    },
-    ...
-  },
-})
-```
-
-Please note that getters do not accept asynchronous functions.
-
-### Actions (Optional)
-
-Actions consist of methods that can accept parameters and modify the current state. Action methods can also be asynchronous:
-
-```javascript
-export const authGudam = defineStore({
-  // ...
-  actions: {
-    setAuth(token, role) {
-      this.token = token
-      this.role = role
-    },
-    ...
-  },
-})
-```
-
-### Plugins (Optional)
-
-Gudam supports plugins. You can include them by providing an array of plugins in your store definition:
-
-```javascript
-export const authGudam = defineStore({
-  // ...
-  plugins: [
-    gudamPersistPlugin({
-      key: 'auth',
-      version: '0.0.1',
-      session: false,
-      parser: JSON.parse,
-    }),
-  ],
-})
-```
-
-## Triggering Effects
-
-Gudam automatically triggers effects whenever changes are made to any state property. However, changes to nested state properties do not trigger effects. You can manually trigger effects by calling `this.$trigger()`:
-
-```javascript
-export const authGudam = defineStore({
-  // ...
-  actions: {
-    setFirstName(name: string) {
-      this.profile.firstName = name // do not trigger effect
-      this.$trigger() // manually triggering effect
-      // or
-      this.profile = { ...this.profile, firstName: name } // automatically triggers effect
-    },
-  },
-})
-```
-
-## Resetting the Store
-
-To reset the entire store to its initial state, you can use the `this.$reset()` method. This can be particularly useful when you need to clear the store and start fresh:
-
-```javascript
-export const authGudam = defineStore({
-  // ...
-  actions: {
-    resetStore() {
-      this.$reset()
-    },
-  },
-})
-```
+   | Property  | Description                                                                                           | Default Value  |
+   | --------- | ----------------------------------------------------------------------------------------------------- | -------------- |
+   | storage\* | Storage engine (`localStorage` or `sessionStorage`). It is required to enable persistence             | undefined      |
+   | version   | Version of your current store. Change the version to invalidate old store values in the browser cache | 0.0.1          |
+   | parse     | Parser function to convert from string to store state                                                 | JSON.parse     |
+   | stringify | Converts stateful properties of your store to a JSON string                                           | JSON.stringify |
 
 ## Accessing the Store
 
-You can access and utilize the store in your components as follows:
+Access and utilize the store in your components as follows:
 
 ```javascript
 import { gudamAuth } from '../store/authStore'
@@ -214,7 +113,7 @@ const Greeting = () => {
 
   return (
     <>
-      <div>{auth.greetings}</div>
+      <div>{auth.greetingMessage}</div>
       {!auth.username && (
         <div>
           <button onClick={loginAsDemo}>Login as Demo User</button>
@@ -228,7 +127,7 @@ export default Greeting
 
 ## Preloading Data
 
-You can use the `$preload` built-in function to preload data into your store. It can commit changes without triggering effects and runs only once:
+You can use the `$preload` built-in function to preload data into your store. It takes a callback function that receives an object with initial state values and returns the updated state. The following example provides additional details:
 
 ```javascript
 import { GudamContext, useGudam } from 'gudam'
@@ -237,10 +136,8 @@ import { gudamAuth } from '../store/authStore'
 function App() {
   const gudam = useGudam()
   const auth = gudamAuth(gudam) // providing the gudam instance because the context is not provided yet
-  auth.$preload(() => {
-    // Callback where we can silently update the store once.
-    auth.setFirstName('Hasinoor')
-    // perform some more synchronous operations
+  auth.$preload((states) => {
+    return { ...states, token: 'jwt-token', role: 'user' }
   })
   return (
     <GudamContext.Provider value={gudam}>
@@ -260,67 +157,16 @@ Please note that once the store is changed, `$preload` does not execute its call
 Gudam follows a modular design, allowing you to use one store inside another. This can be achieved by creating an instance of the store:
 
 ```javascript
-export const gudamAccount = defineStore({
-  state() {
-    return {
-      balance: 0,
-    }
+export const gudamAccount = defineStore('account', {
+  balance: 0,
+  get auth() {
+    return gudamAuth() // Create an instance of gudamAuth
   },
-  getters: {
-    auth() {
-      return gudamAuth() // Create an instance of gudamAuth
-    },
-  },
-  actions: {
-    logout() {
-      this.$reset()
-      this.auth.$reset() // Access gudamAuth via getters
-    },
+  doSomething() {
+    this.auth.setFirstName('Hasinoor')
   },
 })
 ```
-
-## Persist Plugin
-
-You can easily persist your store using the persist plugin:
-
-```javascript
-import { gudamPersistPlugin } from 'gudam'
-
-export const gudamAuth = defineStore({
-  // ...
-  plugins: [gudamPersistPlugin()],
-})
-```
-
-## Persist Plugin Options
-
-The persist plugin accepts an object as a parameter with properties such as `key`, `version`, `session`, and `parser`. Here are the details:
-
-| Property | Description                                             | Type                    | Required | Default Value |
-| -------- | ------------------------------------------------------- | ----------------------- | -------- | ------------- |
-| version  | The version number of your current store                | String                  | No       | 0.0.1         |
-| session  | Set the storage from `localStorage` to `sessionStorage` | Boolean                 | No       | false         |
-| parser   | Parse the saved string of your state to an object       | (str: String) => Object | No       | JSON.parse    |
-
-Please note that the persist plugin is not recommended for use with server-side rendering (SSR), as it can lead to hydration issues.
-
-## Plugin API
-
-A Gudam plugin should be an object with the following properties:
-
-```typescript
-type GudamPlugin<S extends object = {}> = {
-  initState?: (storeKey: string, initialState: S) => unknown
-  onChange?: (storeKey: string, newState: S) => void
-}
-```
-
-- **initState:** This function is called with store key and the current initial state value during the initiation of your store. It should return a state object, which will be used as the initial state.
-
-- **onChange:** This function is called with store key and the `newState` parameter whenever there is a change in your store.
-
-Please note that plugins execute in the order in which they are placed.
 
 ## Need Help?
 

@@ -1,215 +1,149 @@
-import { createContext, useContext, useState } from 'react'
+import { useState, createContext, useContext } from 'react'
+export const GudamContext = createContext<Record<string, unknown>>({})
+type IfEquals<X, Y, A, B> = (<T>() => T extends X ? 1 : 2) extends <
+  T
+>() => T extends Y ? 1 : 2
+  ? A
+  : B
+type WritableKeysOf<T> = {
+  [P in keyof T]: IfEquals<
+    { [Q in P]: T[P] },
+    { -readonly [Q in P]: T[P] },
+    P,
+    never
+  >
+}[keyof T]
+type WritablePart<T> = Pick<T, WritableKeysOf<T>>
+type FunctionPropertyNames<T> = {
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  [K in keyof T]: T[K] extends Function ? K : never
+}[keyof T]
 
-type EmptyStore = {
-  $reset: () => void
-  $trigger: () => void
-  $preload: (cb: () => void) => void
-}
-
-type MethodTypes<T> = {
-  readonly [K in keyof T]: T[K] extends (...args: any[]) => any
-    ? ReturnType<T[K]>
-    : never
-}
-type Getters = Record<string, () => unknown>
-type ResetInjector = {
-  $reset: () => void
-  $preload: (cb: () => void) => void
-}
-type TriggerInjector = { $trigger: () => void }
-export type GudamPlugin<S extends object = {}> = {
-  initState?: (storeKey: string, initialState: S) => unknown
-  onChange?: (storeKey: string, newState: S) => void
-}
-type StoreState<
-  S extends object,
-  G extends Getters = {},
-  A extends Record<string, Function> = {}
-> = {
-  key: string
-  state: () => S
-  getters?: G & ThisType<S & G>
-  actions?: A &
-    ThisType<S & MethodTypes<G> & ResetInjector & TriggerInjector & A>
-  plugins?: GudamPlugin<S>[]
-}
-
-type UnknownStore = StoreState<
-  { [key: string]: any },
-  { [key: string]: any },
-  { [key: string]: Function }
+type OnlyState<T> = Omit<
+  WritablePart<T>,
+  FunctionPropertyNames<WritablePart<T>>
 >
 
-type EmptyStoreS = Record<string, EmptyStore>
+type PreloadCB<T> = (initialState: OnlyState<T>) => OnlyState<T>
+type $Preload<T> = {
+  $preload: (cb: PreloadCB<T>) => void
+}
 
-// eslint-disable-next-line react-refresh/only-export-components
-export const GudamContext = createContext<EmptyStoreS>({})
-
-const proxyfy = <T extends object>(data: T) =>
-  new Proxy(data, {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type PersistOptions<T extends object = any> = {
+  storage?: Storage
+  version?: string
+  stringify?: (value: T) => string
+  parse?: (str: string) => T
+}
+const clone = <T extends object>(store: T) =>
+  new Proxy(store, {
     set() {
       return true
     },
   })
 
 const createGudam = () => {
-  const stores: Record<string, UnknownStore> = {}
-  const useGudam = () => {
-    const [state, setState] = useState(() => {
-      const storeStates: EmptyStoreS = {}
-      for (const key in stores) {
-        if (Object.prototype.hasOwnProperty.call(stores, key)) {
-          const option = stores[key]
-          let isSilent = false
-          let hasChanged = false
-          const { plugins = [] } = option
-          const changeListener = plugins.filter((hooks) => hooks.onChange)
-          let currentState = option.state()
-          plugins.forEach((hooks) => {
-            if (hooks.initState) {
-              currentState = hooks.initState(key, currentState) as any
-            }
-          })
-          const onChange =
-            changeListener.length > 0
-              ? () => {
-                  changeListener.forEach((hooks) => {
-                    hooks.onChange!(key, currentState)
-                  })
-                }
-              : null
-          const $trigger = () => {
-            if (!isSilent) {
-              setState((oldState) => ({ ...oldState, key: proxyfy($this) }))
-              if (onChange) {
-                onChange()
-              }
-              hasChanged = true
-            }
-          }
-          const $this = {
-            $reset: () => {
-              currentState = option.state()
-              $trigger()
-            },
-            $trigger: $trigger,
-            $preload: (cb: () => void) => {
-              if (!hasChanged) {
-                isSilent = true
-                cb()
-                isSilent = false
-              }
-              hasChanged = true
-            },
-          }
-          for (const key in currentState) {
-            if (Object.prototype.hasOwnProperty.call(currentState, key)) {
-              Reflect.defineProperty($this, key, {
-                get() {
-                  return currentState[key]
-                },
-                set(v) {
-                  currentState[key] = v
-                  $trigger()
-                },
-              })
-            }
-          }
-          if (option.getters) {
-            for (const key in option.getters) {
-              if (Object.prototype.hasOwnProperty.call(option.getters, key)) {
-                const getter = option.getters[key]
-                Reflect.defineProperty($this, key, {
-                  get: getter.bind($this),
-                })
-              }
-            }
-          }
-          if (option.actions) {
-            for (const key in option.actions) {
-              if (Object.prototype.hasOwnProperty.call(option.actions, key)) {
-                const action = option.actions[key]
-                Reflect.set($this, key, action.bind($this))
-              }
-            }
-          }
-          storeStates[key] = $this
-        }
-      }
-      return storeStates
-    })
-    return state
-  }
-  const defineStore = <
-    S extends object,
-    G extends Getters,
-    A extends Record<string, Function>
-  >(
-    options: StoreState<S, G, A>
+  const stores: Record<string, object> = {}
+  const persistRecords: Record<string, PersistOptions> = {}
+  const defineStore = <T extends object>(
+    storeKey: string,
+    store: T,
+    persistOptions: PersistOptions<OnlyState<T>> = {}
   ) => {
-    const { key } = options
-    stores[key] = options as UnknownStore
-    const useStore = (
-      ctx = useContext(GudamContext)
-    ): S & MethodTypes<G> & ResetInjector & A => {
-      return (ctx[key] as any) || ({} as any)
+    stores[storeKey] = store
+    persistRecords[storeKey] = persistOptions
+    const useStore = (ctx = useContext(GudamContext)): T & $Preload<T> => {
+      return ctx[storeKey] as T & $Preload<T>
     }
     return useStore
   }
-  return { useGudam, defineStore }
-}
-
-export const { useGudam, defineStore } = createGudam()
-
-const wait0 = () => new Promise<boolean>((resolve) => resolve(true))
-
-export const gudamPersistPlugin = (
-  config: {
-    version?: string
-    session?: boolean
-    parse?: (str: string) => object
-    stringify?: () => string
-  } = {}
-): GudamPlugin => {
-  const storage =
-    typeof sessionStorage !== 'undefined'
-      ? config.session
-        ? sessionStorage
-        : localStorage
-      : undefined
-  const dataVersion = 'gudam_version__' + config.version
-  const {
-    parse = JSON.parse,
-    version = '0.0.1',
-    stringify = JSON.stringify,
-  } = config
-  let hasPending = false
-  return {
-    initState(key, initialState) {
-      const dataKey = 'gudam_data__' + key
-      if (!storage) {
-        return initialState
+  const useGudam = () => {
+    const [state, setState] = useState(() => {
+      const storesInstance: Record<string, object> = {}
+      for (const key in stores) {
+        if (Object.prototype.hasOwnProperty.call(stores, key)) {
+          let hasChanged = false
+          const descriptions = Object.getOwnPropertyDescriptors(stores[key])
+          let states: Record<string, unknown> = {}
+          let hasPending = false
+          const dataKey = `gudam_data__${key}`
+          const versionKey = `gudam_version__${key}`
+          const {
+            storage,
+            parse = JSON.parse,
+            stringify = JSON.stringify,
+            version = '0.0.1',
+          } = persistRecords[key]
+          const persist = storage
+            ? () => {
+              if (!hasPending) {
+                hasPending = true
+                setTimeout(() => {
+                  hasPending = false
+                  storage.setItem(dataKey, stringify(states))
+                }, 0)
+              }
+            }
+            : () => { }
+          const store = {
+            $preload: (cb: PreloadCB<object>) => {
+              if (!hasChanged) {
+                states = cb(states)
+                hasChanged = true
+                persist()
+              }
+            },
+          }
+          for (const key in descriptions) {
+            if (Object.prototype.hasOwnProperty.call(descriptions, key)) {
+              const item = descriptions[key]
+              if (item.writable && typeof item.value !== 'function') {
+                states[key] = item.value
+                Object.defineProperty(store, key, {
+                  get() {
+                    return states[key]
+                  },
+                  set(v) {
+                    states[key] = v
+                    hasChanged = true
+                    setState((oldState: object) => ({
+                      ...oldState,
+                      [key]: clone(store),
+                    }))
+                    persist()
+                  },
+                })
+              } else if (typeof item.value === 'function') {
+                Object.defineProperty(store, key, {
+                  ...item,
+                  value: item.value.bind(store),
+                })
+              } else {
+                Object.defineProperty(store, key, item)
+              }
+            }
+          }
+          if (storage) {
+            const oldVersion = storage.getItem(versionKey)
+            if (oldVersion !== version) {
+              storage.setItem(dataKey, stringify(states))
+              storage.setItem(versionKey, version)
+            } else {
+              const oldData = storage.getItem(dataKey)
+              if (oldData) {
+                states = parse(oldData)
+              }
+            }
+          }
+          storesInstance[key] = clone(store)
+        }
       }
-      const savedData = storage.getItem(dataKey)
-      if (storage.getItem(dataVersion) != version || !savedData) {
-        storage.setItem(dataVersion, version)
-        storage.setItem(dataKey, stringify(initialState))
-        return initialState
-      }
-      return parse(savedData)
-    },
-    onChange(key, newState) {
-      const dataKey = 'gudam_data__' + key
-      if (!storage) {
-        return
-      }
-      if (!hasPending) {
-        hasPending = true
-        wait0().then(() => {
-          hasPending = false
-          storage.setItem(dataKey, stringify(newState))
-        })
-      }
-    },
+      return storesInstance
+    })
+    return state
   }
+  return { defineStore, useGudam }
 }
+
+export const { defineStore, useGudam } = createGudam()
